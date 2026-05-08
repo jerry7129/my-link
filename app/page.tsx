@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Link as LinkType } from "@/data/links"
 import Link from "next/link"
-import { Share2, Link as LinkIcon, ExternalLink, Plus, Loader2 } from "lucide-react"
+import { Share2, Link as LinkIcon, Plus, Loader2, Pencil, Trash2, Check, X } from "lucide-react"
 import { useState, useEffect } from "react"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
@@ -18,10 +18,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { db } from "@/lib/firebase"
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "firebase/firestore"
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, updateDoc, deleteDoc, doc } from "firebase/firestore"
 import { toast } from "sonner"
 
 function getDomain(url: string) {
@@ -49,6 +59,9 @@ export default function Page() {
   const [links, setLinks] = useState<LinkType[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null)
+  const [deleteLinkId, setDeleteLinkId] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchLinks = async () => {
@@ -83,7 +96,20 @@ export default function Page() {
     register,
     handleSubmit,
     reset,
-    formState: { errors },
+    formState: { errors, isSubmitting: isAdding },
+  } = useForm<LinkFormValues>({
+    resolver: zodResolver(linkSchema),
+    defaultValues: {
+      title: "",
+      url: "",
+    },
+  })
+
+  const {
+    register: registerEdit,
+    handleSubmit: handleEditSubmit,
+    reset: resetEdit,
+    formState: { errors: editErrors, isSubmitting: isEditing },
   } = useForm<LinkFormValues>({
     resolver: zodResolver(linkSchema),
     defaultValues: {
@@ -116,6 +142,65 @@ export default function Page() {
       toast.error("링크 추가에 실패했습니다.")
     }
   }
+
+  const startEditing = (e: React.MouseEvent, link: LinkType) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingLinkId(link.id);
+    resetEdit({ title: link.title, url: link.url });
+  };
+
+  const cancelEditing = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setEditingLinkId(null);
+  };
+
+  const onEditSubmit = async (data: LinkFormValues) => {
+    if (!editingLinkId) return;
+    try {
+      const docRef = doc(db, "users", "anonymous", "links", editingLinkId);
+      await updateDoc(docRef, {
+        title: data.title,
+        url: data.url,
+      });
+
+      setLinks(links.map(link => 
+        link.id === editingLinkId 
+          ? { ...link, title: data.title, url: data.url } 
+          : link
+      ));
+      setEditingLinkId(null);
+      toast.success("링크가 수정되었습니다.");
+    } catch (error) {
+      console.error("Error updating link:", error);
+      toast.error("링크 수정에 실패했습니다.");
+    }
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, linkId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDeleteLinkId(linkId);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteLinkId) return;
+    setIsDeleting(true);
+    try {
+      await deleteDoc(doc(db, "users", "anonymous", "links", deleteLinkId));
+      setLinks(links.filter(link => link.id !== deleteLinkId));
+      setDeleteLinkId(null);
+      toast.success("링크가 삭제되었습니다.");
+    } catch (error) {
+      console.error("Error deleting link:", error);
+      toast.error("링크 삭제에 실패했습니다.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleShare = async () => {
     try {
@@ -228,7 +313,10 @@ export default function Page() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="submit">새 링크 추가하기</Button>
+                  <Button type="submit" disabled={isAdding}>
+                    {isAdding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    새 링크 추가하기
+                  </Button>
                 </DialogFooter>
               </form>
             </DialogContent>
@@ -245,6 +333,50 @@ export default function Page() {
               <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">새 링크 추가 버튼을 눌러 첫 링크를 만들어보세요!</p>
             </div>
           ) : links.map((link, index) => {
+            if (editingLinkId === link.id) {
+              return (
+                <Card key={`edit-${link.id}`} className="relative overflow-hidden border border-indigo-200 dark:border-indigo-900 bg-white/90 dark:bg-slate-900/90 shadow-lg rounded-2xl p-4 animate-in fade-in zoom-in-95 duration-200">
+                  <form onSubmit={handleEditSubmit(onEditSubmit)} className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1">
+                      <Input
+                        {...registerEdit("title")}
+                        placeholder="제목"
+                        autoComplete="off"
+                        autoFocus
+                        className={editErrors.title ? "border-red-500 focus-visible:ring-red-500" : ""}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') cancelEditing();
+                        }}
+                      />
+                      {editErrors.title && <p className="text-xs text-red-500 font-medium">{editErrors.title.message}</p>}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Input
+                        {...registerEdit("url")}
+                        placeholder="https://..."
+                        type="url"
+                        autoComplete="off"
+                        className={editErrors.url ? "border-red-500 focus-visible:ring-red-500" : ""}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') cancelEditing();
+                        }}
+                      />
+                      {editErrors.url && <p className="text-xs text-red-500 font-medium">{editErrors.url.message}</p>}
+                    </div>
+                    <div className="flex justify-end gap-2 mt-2">
+                      <Button type="button" variant="ghost" size="sm" onClick={cancelEditing} disabled={isEditing}>
+                        <X className="w-4 h-4 mr-1" /> 취소
+                      </Button>
+                      <Button type="submit" size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-600" disabled={isEditing}>
+                        {isEditing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
+                        저장
+                      </Button>
+                    </div>
+                  </form>
+                </Card>
+              );
+            }
+
             const domain = getDomain(link.url);
             const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : "";
             
@@ -286,11 +418,26 @@ export default function Page() {
                         </h2>
                       </div>
                       
-                      {/* Secondary Icon */}
-                      <div className="w-12 flex-shrink-0 flex justify-end items-center pr-2">
-                        <div className="w-8 h-8 rounded-full bg-slate-50 dark:bg-slate-800/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                          <ExternalLink className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                        </div>
+                      {/* Action Buttons */}
+                      <div className="flex-shrink-0 flex items-center gap-1 pr-2 relative z-20">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-400 rounded-full transition-colors"
+                          onClick={(e) => startEditing(e, link)}
+                          title="수정"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 dark:hover:text-red-400 rounded-full transition-colors"
+                          onClick={(e) => handleDeleteClick(e, link.id)}
+                          title="삭제"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
@@ -299,6 +446,33 @@ export default function Page() {
             )
           })}
         </div>
+        
+        {/* Delete Alert Dialog */}
+        <AlertDialog open={!!deleteLinkId} onOpenChange={(open) => !open && setDeleteLinkId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>정말 삭제하시겠습니까?</AlertDialogTitle>
+              <AlertDialogDescription>
+                선택하신 링크(<span className="font-semibold text-slate-700 dark:text-slate-300">{links.find(l => l.id === deleteLinkId)?.title}</span>)를 삭제합니다.<br/>
+                <span className="text-red-500 font-semibold mt-2 inline-block">이 작업은 되돌릴 수 없습니다.</span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>취소</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={(e) => {
+                  e.preventDefault();
+                  confirmDelete();
+                }} 
+                className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 focus:ring-red-500"
+                disabled={isDeleting}
+              >
+                {isDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                삭제하기
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         
         {/* Footer */}
         <footer className="mt-16 text-center animate-in fade-in duration-1000 delay-700">
