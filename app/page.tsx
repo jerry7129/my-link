@@ -2,10 +2,10 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { demoLinks } from "@/data/links"
+import { Link as LinkType } from "@/data/links"
 import Link from "next/link"
-import { Share2, Link as LinkIcon, ExternalLink, Plus } from "lucide-react"
-import { useState } from "react"
+import { Share2, Link as LinkIcon, ExternalLink, Plus, Loader2 } from "lucide-react"
+import { useState, useEffect } from "react"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -20,6 +20,9 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { db } from "@/lib/firebase"
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "firebase/firestore"
+import { toast } from "sonner"
 
 function getDomain(url: string) {
   try {
@@ -43,8 +46,38 @@ const linkSchema = z.object({
 type LinkFormValues = z.infer<typeof linkSchema>
 
 export default function Page() {
-  const [links, setLinks] = useState(demoLinks)
+  const [links, setLinks] = useState<LinkType[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchLinks = async () => {
+      try {
+        const q = query(
+          collection(db, "users", "anonymous", "links"),
+          orderBy("createdAt", "desc")
+        )
+        const querySnapshot = await getDocs(q)
+        const fetchedLinks: LinkType[] = querySnapshot.docs.map(doc => {
+          const data = doc.data()
+          return {
+            id: doc.id,
+            title: data.title,
+            url: data.url,
+            createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString()
+          }
+        })
+        setLinks(fetchedLinks)
+      } catch (error) {
+        console.error("Error fetching links:", error)
+        toast.error("링크를 불러오는데 실패했습니다.")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchLinks()
+  }, [])
 
   const {
     register,
@@ -59,25 +92,38 @@ export default function Page() {
     },
   })
 
-  const onSubmit = (data: LinkFormValues) => {
-    const newLink = {
-      id: Date.now().toString(),
-      title: data.title,
-      url: data.url,
-      createdAt: new Date().toISOString()
-    }
+  const onSubmit = async (data: LinkFormValues) => {
+    try {
+      const docRef = await addDoc(collection(db, "users", "anonymous", "links"), {
+        title: data.title,
+        url: data.url,
+        createdAt: serverTimestamp()
+      })
 
-    setLinks([newLink, ...links])
-    setIsDialogOpen(false)
-    reset()
+      const newLink: LinkType = {
+        id: docRef.id,
+        title: data.title,
+        url: data.url,
+        createdAt: new Date().toISOString()
+      }
+
+      setLinks([newLink, ...links])
+      setIsDialogOpen(false)
+      reset()
+      toast.success("새 링크가 추가되었습니다.")
+    } catch (error) {
+      console.error("Error adding link:", error)
+      toast.error("링크 추가에 실패했습니다.")
+    }
   }
 
   const handleShare = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href)
-      alert("프로필 주소가 클립보드에 복사되었습니다!")
+      toast.success("프로필 주소가 클립보드에 복사되었습니다!")
     } catch (err) {
       console.error("복사에 실패했습니다.", err)
+      toast.error("복사에 실패했습니다.")
     }
   }
 
@@ -188,7 +234,17 @@ export default function Page() {
             </DialogContent>
           </Dialog>
 
-          {links.map((link, index) => {
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-10 opacity-70">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-4" />
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">링크를 불러오는 중입니다...</p>
+            </div>
+          ) : links.length === 0 ? (
+            <div className="text-center py-10 px-4 bg-white/50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+              <p className="text-slate-500 dark:text-slate-400 font-medium">아직 추가된 링크가 없습니다.</p>
+              <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">새 링크 추가 버튼을 눌러 첫 링크를 만들어보세요!</p>
+            </div>
+          ) : links.map((link, index) => {
             const domain = getDomain(link.url);
             const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : "";
             
