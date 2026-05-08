@@ -79,6 +79,7 @@ export default function Page() {
           const newData = {
             uid: currentUser.uid,
             displayName: emailId,
+            username: currentUser.displayName,
             email: currentUser.email,
             photoURL: currentUser.photoURL,
             createdAt: serverTimestamp()
@@ -86,11 +87,22 @@ export default function Page() {
           await setDoc(userRef, newData)
           setUserData(newData)
         } else {
-          // 기존 유저의 경우에도 displayName을 이메일 아이디로 덮어씌웁니다 (사용자 요청 사항)
-          await updateDoc(userRef, {
-            displayName: emailId
-          })
-          setUserData({ ...userSnap.data(), displayName: emailId })
+          // 기존 유저 데이터 업데이트 (username이 없거나 displayName 갱신 필요 시)
+          const existingData = userSnap.data();
+          const updates: any = {};
+          if (!existingData.username) {
+            updates.username = currentUser.displayName;
+          }
+          if (existingData.displayName !== emailId) {
+            updates.displayName = emailId;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await updateDoc(userRef, updates)
+            setUserData({ ...existingData, ...updates })
+          } else {
+            setUserData(existingData)
+          }
         }
       } else {
         setUserData(null)
@@ -362,9 +374,14 @@ export default function Page() {
             </div>
           </div>
           
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-2">
-            {userData?.displayName || (user.email ? user.email.split('@')[0] : (user.displayName || "사용자"))}
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-1">
+            {userData?.username || user.displayName || "사용자"}
           </h1>
+          {userData?.displayName && (
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-3">
+              @{userData.displayName}
+            </p>
+          )}
           <p className="text-base text-slate-600 dark:text-slate-400 text-center max-w-[280px] leading-relaxed font-medium">
             환영합니다! 다양한 플랫폼과 포트폴리오를 한 곳에 모았습니다. ✨
           </p>
