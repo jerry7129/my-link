@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Link as LinkType } from "@/data/links"
 import Link from "next/link"
-import { Share2, Link as LinkIcon, Plus, Loader2, Pencil, Trash2, Check, X, LogOut } from "lucide-react"
+import { Link as LinkIcon, Plus, Loader2, Pencil, Trash2, Check, X, LogOut, Eye, Copy, User as UserIcon } from "lucide-react"
 import { useState, useEffect } from "react"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
@@ -34,6 +34,14 @@ import { db, auth, googleProvider } from "@/lib/firebase"
 import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, updateDoc, deleteDoc, doc, setDoc, getDoc } from "firebase/firestore"
 import { signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth"
 import { toast } from "sonner"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 function getDomain(url: string) {
   try {
@@ -278,15 +286,6 @@ export default function Page() {
     }
   };
 
-  const handleShare = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href)
-      toast.success("프로필 주소가 클립보드에 복사되었습니다!")
-    } catch (err) {
-      console.error("복사에 실패했습니다.", err)
-      toast.error("복사에 실패했습니다.")
-    }
-  }
 
   if (loadingAuth) {
     return (
@@ -299,27 +298,79 @@ export default function Page() {
 
   if (!user) {
     return (
-      <div className="relative min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden px-6">
+      <div className="relative min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden">
+        {/* Background Gradients */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
           <div className="absolute -top-[20%] -right-[10%] w-[70vw] h-[70vw] max-w-[600px] max-h-[600px] bg-indigo-300/40 dark:bg-indigo-900/30 rounded-full mix-blend-multiply filter blur-[100px] animate-pulse" />
           <div className="absolute top-[20%] -left-[10%] w-[60vw] h-[60vw] max-w-[500px] max-h-[500px] bg-purple-300/40 dark:bg-purple-900/30 rounded-full mix-blend-multiply filter blur-[100px]" />
+          <div className="absolute bottom-[10%] right-[5%] w-[40vw] h-[40vw] max-w-[350px] max-h-[350px] bg-pink-300/30 dark:bg-pink-900/20 rounded-full mix-blend-multiply filter blur-[100px]" />
         </div>
-        <div className="relative z-10 text-center max-w-md">
-          <div className="mb-6 inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-tr from-indigo-500 to-purple-500 shadow-lg text-white">
-            <LinkIcon className="w-10 h-10" />
+
+        {/* Header */}
+        <header className="relative z-10 w-full px-6 py-5">
+          <div className="max-w-lg mx-auto flex items-center">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-sm">
+                <LinkIcon className="w-4 h-4 text-white" />
+              </div>
+              <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">My Link</span>
+            </div>
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-4">
-            My Link
-          </h1>
-          <p className="text-base text-slate-600 dark:text-slate-400 mb-10 leading-relaxed">
-            로그인하여 나만의 링크 트리를 만들어보세요!<br/>다양한 플랫폼과 포트폴리오를 한 곳에 모을 수 있습니다.
-          </p>
-          <Button onClick={handleSignIn} className="w-full bg-white hover:bg-slate-50 text-slate-900 border border-slate-200 shadow-md h-14 rounded-2xl flex items-center justify-center font-semibold transition-all dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white dark:border-slate-700 text-base">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-5 h-5 mr-3" />
-            Google 계정으로 계속하기
-          </Button>
+        </header>
+
+        {/* Hero Section */}
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 pb-20">
+          <div className="text-center max-w-md animate-in fade-in slide-in-from-bottom-6 duration-700">
+            <div className="mb-8 inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 shadow-xl text-white">
+              <LinkIcon className="w-12 h-12" />
+            </div>
+            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-4 leading-tight">
+              나만의 링크를<br/>
+              <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">한 곳에 모으세요</span>
+            </h1>
+            <p className="text-lg text-slate-600 dark:text-slate-400 mb-12 leading-relaxed">
+              소셜 미디어, 포트폴리오, 웹사이트를<br/>
+              단 하나의 URL로 공유하세요.
+            </p>
+            <Button onClick={handleSignIn} className="w-full max-w-sm mx-auto bg-white hover:bg-slate-50 text-slate-900 border border-slate-200 shadow-lg h-14 rounded-2xl flex items-center justify-center font-semibold transition-all dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white dark:border-slate-700 text-base hover:scale-[1.02] active:scale-[0.98]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-5 h-5 mr-3" />
+              Google 계정으로 시작하기
+            </Button>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-4">
+              100% 무료 · 가입 후 바로 사용 가능
+            </p>
+          </div>
+
+          {/* Feature Highlights */}
+          <div className="mt-16 grid grid-cols-3 gap-6 max-w-md w-full animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300" style={{ animationFillMode: 'both' }}>
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+                <LinkIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">링크 통합 관리</p>
+            </div>
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/40 flex items-center justify-center">
+                <Eye className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">모바일 최적화</p>
+            </div>
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="w-12 h-12 rounded-2xl bg-pink-100 dark:bg-pink-900/40 flex items-center justify-center">
+                <Copy className="w-5 h-5 text-pink-600 dark:text-pink-400" />
+              </div>
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">간편 공유</p>
+            </div>
+          </div>
         </div>
+
+        {/* Footer */}
+        <footer className="relative z-10 py-6 text-center">
+          <p className="text-sm text-slate-400 dark:text-slate-500">
+            Build with <span className="font-bold text-slate-900 dark:text-white">My Link</span>
+          </p>
+        </footer>
       </div>
     )
   }
@@ -335,27 +386,79 @@ export default function Page() {
 
       <main className="relative z-10 flex w-full max-w-lg flex-col items-center py-10 px-6 sm:px-8 min-h-screen">
         
-        {/* Top bar */}
-        <div className="w-full flex justify-between mb-2">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleSignOut}
-            className="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            로그아웃
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={handleShare}
-            className="rounded-full bg-white/40 dark:bg-slate-900/40 backdrop-blur-md hover:bg-white/80 dark:hover:bg-slate-800 transition-all border border-white/50 dark:border-white/10 shadow-sm"
-            aria-label="공유하기"
-            title="공유하기"
-          >
-            <Share2 className="w-4 h-4 text-slate-700 dark:text-slate-300" />
-          </Button>
+        {/* Header */}
+        <div className="w-full flex justify-between items-center mb-6">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-sm">
+              <LinkIcon className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">My Link</span>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="rounded-full w-10 h-10 overflow-hidden border-2 border-white/60 dark:border-white/10 shadow-sm hover:shadow-md transition-all hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                {user.photoURL ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                    <UserIcon className="w-5 h-5 text-slate-500" />
+                  </div>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              {/* 계정 정보 */}
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {userData?.username || user.displayName || "사용자"}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {user.email}
+                  </p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {/* 내 페이지 미리보기 */}
+              <DropdownMenuItem
+                onClick={() => {
+                  const displayName = userData?.displayName;
+                  if (displayName) {
+                    window.open(`/${displayName}`, '_blank');
+                  } else {
+                    toast.error("고유 URL이 아직 설정되지 않았습니다.");
+                  }
+                }}
+                className="cursor-pointer"
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                내 페이지 미리보기
+              </DropdownMenuItem>
+              {/* 링크 복사 */}
+              <DropdownMenuItem
+                onClick={() => {
+                  const displayName = userData?.displayName;
+                  if (displayName) {
+                    navigator.clipboard.writeText(`${window.location.origin}/${displayName}`);
+                    toast.success("프로필 주소가 클립보드에 복사되었습니다!");
+                  } else {
+                    toast.error("고유 URL이 아직 설정되지 않았습니다.");
+                  }
+                }}
+                className="cursor-pointer"
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                링크 복사
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {/* 로그아웃 */}
+              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400">
+                <LogOut className="w-4 h-4 mr-2" />
+                로그아웃
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Profile Section */}
