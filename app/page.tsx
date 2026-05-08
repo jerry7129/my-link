@@ -6,6 +6,9 @@ import { demoLinks } from "@/data/links"
 import Link from "next/link"
 import { Share2, Link as LinkIcon, ExternalLink, Plus } from "lucide-react"
 import { useState } from "react"
+import { z } from "zod"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import {
   Dialog,
   DialogContent,
@@ -26,27 +29,47 @@ function getDomain(url: string) {
   }
 }
 
+const linkSchema = z.object({
+  title: z
+    .string()
+    .min(1, { message: "제목을 입력해주세요." })
+    .max(50, { message: "제목은 50자 이내로 입력해주세요." }),
+  url: z
+    .string()
+    .min(1, { message: "URL을 입력해주세요." })
+    .url({ message: "올바른 URL 형식을 입력해주세요 (예: https://...)" }),
+})
+
+type LinkFormValues = z.infer<typeof linkSchema>
+
 export default function Page() {
   const [links, setLinks] = useState(demoLinks)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [newLinkTitle, setNewLinkTitle] = useState("")
-  const [newLinkUrl, setNewLinkUrl] = useState("")
 
-  const handleAddLink = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newLinkTitle || !newLinkUrl) return
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<LinkFormValues>({
+    resolver: zodResolver(linkSchema),
+    defaultValues: {
+      title: "",
+      url: "",
+    },
+  })
 
+  const onSubmit = (data: LinkFormValues) => {
     const newLink = {
       id: Date.now().toString(),
-      title: newLinkTitle,
-      url: newLinkUrl,
+      title: data.title,
+      url: data.url,
       createdAt: new Date().toISOString()
     }
 
     setLinks([newLink, ...links])
     setIsDialogOpen(false)
-    setNewLinkTitle("")
-    setNewLinkUrl("")
+    reset()
   }
 
   const handleShare = async () => {
@@ -105,7 +128,12 @@ export default function Page() {
         {/* Links List Section */}
         <div className="flex w-full flex-col gap-4">
           {/* Add Link Button & Dialog */}
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
+            setIsDialogOpen(open)
+            if (!open) {
+              reset()
+            }
+          }}>
             <DialogTrigger asChild>
               <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20 h-14 rounded-2xl mb-2 flex items-center justify-center font-semibold transition-all dark:bg-indigo-500 dark:hover:bg-indigo-600">
                 <Plus className="w-5 h-5 mr-2" />
@@ -119,34 +147,38 @@ export default function Page() {
                   추가할 링크의 제목과 목적지 URL을 입력해주세요.
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleAddLink}>
+              <form onSubmit={handleSubmit(onSubmit)}>
                 <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="title" className="text-right">
+                  <div className="grid grid-cols-4 items-start gap-4">
+                    <Label htmlFor="title" className="text-right mt-3">
                       제목
                     </Label>
-                    <Input
-                      id="title"
-                      value={newLinkTitle}
-                      onChange={(e) => setNewLinkTitle(e.target.value)}
-                      placeholder="예: 내 인스타그램"
-                      className="col-span-3"
-                      required
-                    />
+                    <div className="col-span-3">
+                      <Input
+                        id="title"
+                        {...register("title")}
+                        placeholder="예: 내 인스타그램"
+                        autoComplete="off"
+                        className={errors.title ? "border-red-500 focus-visible:ring-red-500" : ""}
+                      />
+                      {errors.title && <p className="text-sm text-red-500 mt-1 font-medium">{errors.title.message}</p>}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="url" className="text-right">
+                  <div className="grid grid-cols-4 items-start gap-4">
+                    <Label htmlFor="url" className="text-right mt-3">
                       URL
                     </Label>
-                    <Input
-                      id="url"
-                      value={newLinkUrl}
-                      onChange={(e) => setNewLinkUrl(e.target.value)}
-                      placeholder="https://instagram.com/..."
-                      className="col-span-3"
-                      required
-                      type="url"
-                    />
+                    <div className="col-span-3">
+                      <Input
+                        id="url"
+                        {...register("url")}
+                        placeholder="https://instagram.com/..."
+                        type="url"
+                        autoComplete="off"
+                        className={errors.url ? "border-red-500 focus-visible:ring-red-500" : ""}
+                      />
+                      {errors.url && <p className="text-sm text-red-500 mt-1 font-medium">{errors.url.message}</p>}
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>
