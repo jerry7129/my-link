@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Link as LinkType } from "@/data/links"
 import Link from "next/link"
-import { Share2, Link as LinkIcon, Plus, Loader2, Pencil, Trash2, Check, X } from "lucide-react"
+import { Share2, Link as LinkIcon, Plus, Loader2, Pencil, Trash2, Check, X, LogOut } from "lucide-react"
 import { useState, useEffect } from "react"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
@@ -30,8 +30,9 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { db } from "@/lib/firebase"
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, updateDoc, deleteDoc, doc } from "firebase/firestore"
+import { db, auth, googleProvider } from "@/lib/firebase"
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, updateDoc, deleteDoc, doc, setDoc, getDoc } from "firebase/firestore"
+import { signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth"
 import { toast } from "sonner"
 
 function getDomain(url: string) {
@@ -62,12 +63,55 @@ export default function Page() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null)
   const [deleteLinkId, setDeleteLinkId] = useState<string | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [userData, setUserData] = useState<any>(null)
+  const [loadingAuth, setLoadingAuth] = useState(true)
 
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser)
+      if (currentUser) {
+        const userRef = doc(db, "users", currentUser.uid)
+        const userSnap = await getDoc(userRef)
+        const emailId = currentUser.email ? currentUser.email.split('@')[0] : currentUser.displayName;
+        
+        if (!userSnap.exists()) {
+          const newData = {
+            uid: currentUser.uid,
+            displayName: emailId,
+            email: currentUser.email,
+            photoURL: currentUser.photoURL,
+            createdAt: serverTimestamp()
+          };
+          await setDoc(userRef, newData)
+          setUserData(newData)
+        } else {
+          // 기존 유저의 경우에도 displayName을 이메일 아이디로 덮어씌웁니다 (사용자 요청 사항)
+          await updateDoc(userRef, {
+            displayName: emailId
+          })
+          setUserData({ ...userSnap.data(), displayName: emailId })
+        }
+      } else {
+        setUserData(null)
+      }
+      setLoadingAuth(false)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (!user) {
+      setLinks([])
+      setIsLoading(false)
+      return
+    }
+
+    setIsLoading(true)
     const fetchLinks = async () => {
       try {
         const q = query(
-          collection(db, "users", "anonymous", "links"),
+          collection(db, "users", user.uid, "links"),
           orderBy("createdAt", "desc")
         )
         const querySnapshot = await getDocs(q)
@@ -90,7 +134,26 @@ export default function Page() {
     }
 
     fetchLinks()
-  }, [])
+  }, [user])
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider)
+    } catch (error) {
+      console.error("Login failed:", error)
+      toast.error("구글 로그인에 실패했습니다.")
+    }
+  }
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth)
+      toast.success("로그아웃 되었습니다.")
+    } catch (error) {
+      console.error("Logout failed:", error)
+      toast.error("로그아웃에 실패했습니다.")
+    }
+  }
 
   const {
     register,
@@ -119,8 +182,9 @@ export default function Page() {
   })
 
   const onSubmit = async (data: LinkFormValues) => {
+    if (!user) return;
     try {
-      const docRef = await addDoc(collection(db, "users", "anonymous", "links"), {
+      const docRef = await addDoc(collection(db, "users", user.uid, "links"), {
         title: data.title,
         url: data.url,
         createdAt: serverTimestamp()
@@ -159,9 +223,9 @@ export default function Page() {
   };
 
   const onEditSubmit = async (data: LinkFormValues) => {
-    if (!editingLinkId) return;
+    if (!editingLinkId || !user) return;
     try {
-      const docRef = doc(db, "users", "anonymous", "links", editingLinkId);
+      const docRef = doc(db, "users", user.uid, "links", editingLinkId);
       await updateDoc(docRef, {
         title: data.title,
         url: data.url,
@@ -187,10 +251,10 @@ export default function Page() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteLinkId) return;
+    if (!deleteLinkId || !user) return;
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "users", "anonymous", "links", deleteLinkId));
+      await deleteDoc(doc(db, "users", user.uid, "links", deleteLinkId));
       setLinks(links.filter(link => link.id !== deleteLinkId));
       setDeleteLinkId(null);
       toast.success("링크가 삭제되었습니다.");
@@ -212,6 +276,42 @@ export default function Page() {
     }
   }
 
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-4" />
+        <p className="text-slate-500 font-medium">인증 정보를 불러오는 중입니다...</p>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="relative min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden px-6">
+        <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+          <div className="absolute -top-[20%] -right-[10%] w-[70vw] h-[70vw] max-w-[600px] max-h-[600px] bg-indigo-300/40 dark:bg-indigo-900/30 rounded-full mix-blend-multiply filter blur-[100px] animate-pulse" />
+          <div className="absolute top-[20%] -left-[10%] w-[60vw] h-[60vw] max-w-[500px] max-h-[500px] bg-purple-300/40 dark:bg-purple-900/30 rounded-full mix-blend-multiply filter blur-[100px]" />
+        </div>
+        <div className="relative z-10 text-center max-w-md">
+          <div className="mb-6 inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-tr from-indigo-500 to-purple-500 shadow-lg text-white">
+            <LinkIcon className="w-10 h-10" />
+          </div>
+          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-4">
+            My Link
+          </h1>
+          <p className="text-base text-slate-600 dark:text-slate-400 mb-10 leading-relaxed">
+            로그인하여 나만의 링크 트리를 만들어보세요!<br/>다양한 플랫폼과 포트폴리오를 한 곳에 모을 수 있습니다.
+          </p>
+          <Button onClick={handleSignIn} className="w-full bg-white hover:bg-slate-50 text-slate-900 border border-slate-200 shadow-md h-14 rounded-2xl flex items-center justify-center font-semibold transition-all dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white dark:border-slate-700 text-base">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-5 h-5 mr-3" />
+            Google 계정으로 계속하기
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="relative min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden">
       
@@ -224,7 +324,16 @@ export default function Page() {
       <main className="relative z-10 flex w-full max-w-lg flex-col items-center py-10 px-6 sm:px-8 min-h-screen">
         
         {/* Top bar */}
-        <div className="w-full flex justify-end mb-2">
+        <div className="w-full flex justify-between mb-2">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleSignOut}
+            className="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            로그아웃
+          </Button>
           <Button 
             variant="ghost" 
             size="icon" 
@@ -243,13 +352,18 @@ export default function Page() {
           <div className="relative w-28 h-28 mb-5 group">
             <div className="w-full h-full rounded-full bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-[3px] shadow-lg transform transition-transform group-hover:scale-105 duration-300">
               <div className="w-full h-full rounded-full border-4 border-white dark:border-slate-950 overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                <span className="text-4xl">🧑‍💻</span>
+                {user.photoURL ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-4xl">🧑‍💻</span>
+                )}
               </div>
             </div>
           </div>
           
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-2">
-            홍길동 (Hong Gil-Dong)
+            {userData?.displayName || (user.email ? user.email.split('@')[0] : (user.displayName || "사용자"))}
           </h1>
           <p className="text-base text-slate-600 dark:text-slate-400 text-center max-w-[280px] leading-relaxed font-medium">
             환영합니다! 다양한 플랫폼과 포트폴리오를 한 곳에 모았습니다. ✨
