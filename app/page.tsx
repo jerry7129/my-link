@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Link as LinkType } from "@/data/links"
 import Link from "next/link"
 import { Link as LinkIcon, Plus, Loader2, Pencil, Trash2, Check, X, LogOut, Eye, Copy, User as UserIcon } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -30,9 +30,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { db, auth, googleProvider } from "@/lib/firebase"
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp, updateDoc, deleteDoc, doc, setDoc, getDoc } from "firebase/firestore"
-import { signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth"
+import { auth, googleProvider } from "@/lib/firebase"
+import { signInWithPopup, signOut } from "firebase/auth"
 import { toast } from "sonner"
 import {
   DropdownMenu,
@@ -42,6 +41,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useAuthUser } from "@/hooks/useAuthUser"
+import { useLinks } from "@/hooks/useLinks"
+import { useProfile } from "@/hooks/useProfile"
 
 function getDomain(url: string) {
   try {
@@ -65,96 +67,15 @@ const linkSchema = z.object({
 type LinkFormValues = z.infer<typeof linkSchema>
 
 export default function Page() {
-  const [links, setLinks] = useState<LinkType[]>([])
+  const { user, userData, loadingAuth } = useAuthUser()
+  const { links, isLoadingLinks, addLink, editLink, deleteLink, isDeleting } = useLinks(user?.uid)
+  const { updateProfile, isUpdating } = useProfile()
+
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isDeleting, setIsDeleting] = useState(false)
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null)
   const [deleteLinkId, setDeleteLinkId] = useState<string | null>(null)
-  const [user, setUser] = useState<User | null>(null)
-  const [userData, setUserData] = useState<any>(null)
-  const [loadingAuth, setLoadingAuth] = useState(true)
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser)
-      if (currentUser) {
-        const userRef = doc(db, "users", currentUser.uid)
-        const userSnap = await getDoc(userRef)
-        const emailId = currentUser.email ? currentUser.email.split('@')[0] : currentUser.displayName;
-        
-        if (!userSnap.exists()) {
-          const newData = {
-            uid: currentUser.uid,
-            displayName: emailId,
-            username: currentUser.displayName,
-            email: currentUser.email,
-            photoURL: currentUser.photoURL,
-            createdAt: serverTimestamp()
-          };
-          await setDoc(userRef, newData)
-          setUserData(newData)
-        } else {
-          // 기존 유저 데이터 업데이트 (username이 없거나 displayName 갱신 필요 시)
-          const existingData = userSnap.data();
-          const updates: any = {};
-          if (!existingData.username) {
-            updates.username = currentUser.displayName;
-          }
-          if (existingData.displayName !== emailId) {
-            updates.displayName = emailId;
-          }
-
-          if (Object.keys(updates).length > 0) {
-            await updateDoc(userRef, updates)
-            setUserData({ ...existingData, ...updates })
-          } else {
-            setUserData(existingData)
-          }
-        }
-      } else {
-        setUserData(null)
-      }
-      setLoadingAuth(false)
-    })
-    return () => unsubscribe()
-  }, [])
-
-  useEffect(() => {
-    if (!user) {
-      setLinks([])
-      setIsLoading(false)
-      return
-    }
-
-    setIsLoading(true)
-    const fetchLinks = async () => {
-      try {
-        const q = query(
-          collection(db, "users", user.uid, "links"),
-          orderBy("createdAt", "desc")
-        )
-        const querySnapshot = await getDocs(q)
-        const fetchedLinks: LinkType[] = querySnapshot.docs.map(doc => {
-          const data = doc.data()
-          return {
-            id: doc.id,
-            title: data.title,
-            url: data.url,
-            createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString()
-          }
-        })
-        setLinks(fetchedLinks)
-      } catch (error) {
-        console.error("Error fetching links:", error)
-        toast.error("링크를 불러오는데 실패했습니다.")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchLinks()
-  }, [user])
+  const [editingProfileField, setEditingProfileField] = useState<'username' | 'displayName' | 'bio' | null>(null)
+  const [profileFormValue, setProfileFormValue] = useState("")
 
   const handleSignIn = async () => {
     try {
@@ -179,7 +100,7 @@ export default function Page() {
     register,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting: isAdding },
+    formState: { errors, isSubmitting: isAddingLocal },
   } = useForm<LinkFormValues>({
     resolver: zodResolver(linkSchema),
     defaultValues: {
@@ -192,7 +113,7 @@ export default function Page() {
     register: registerEdit,
     handleSubmit: handleEditSubmit,
     reset: resetEdit,
-    formState: { errors: editErrors, isSubmitting: isEditing },
+    formState: { errors: editErrors, isSubmitting: isEditingLocal },
   } = useForm<LinkFormValues>({
     resolver: zodResolver(linkSchema),
     defaultValues: {
@@ -204,26 +125,11 @@ export default function Page() {
   const onSubmit = async (data: LinkFormValues) => {
     if (!user) return;
     try {
-      const docRef = await addDoc(collection(db, "users", user.uid, "links"), {
-        title: data.title,
-        url: data.url,
-        createdAt: serverTimestamp()
-      })
-
-      const newLink: LinkType = {
-        id: docRef.id,
-        title: data.title,
-        url: data.url,
-        createdAt: new Date().toISOString()
-      }
-
-      setLinks([newLink, ...links])
+      await addLink({ title: data.title, url: data.url })
       setIsDialogOpen(false)
       reset()
-      toast.success("새 링크가 추가되었습니다.")
     } catch (error) {
-      console.error("Error adding link:", error)
-      toast.error("링크 추가에 실패했습니다.")
+      // 에러는 useLinks 내부에서 처리됨
     }
   }
 
@@ -245,22 +151,10 @@ export default function Page() {
   const onEditSubmit = async (data: LinkFormValues) => {
     if (!editingLinkId || !user) return;
     try {
-      const docRef = doc(db, "users", user.uid, "links", editingLinkId);
-      await updateDoc(docRef, {
-        title: data.title,
-        url: data.url,
-      });
-
-      setLinks(links.map(link => 
-        link.id === editingLinkId 
-          ? { ...link, title: data.title, url: data.url } 
-          : link
-      ));
+      await editLink({ linkId: editingLinkId, title: data.title, url: data.url });
       setEditingLinkId(null);
-      toast.success("링크가 수정되었습니다.");
     } catch (error) {
-      console.error("Error updating link:", error);
-      toast.error("링크 수정에 실패했습니다.");
+      // 에러는 useLinks 내부에서 처리됨
     }
   };
 
@@ -272,17 +166,57 @@ export default function Page() {
 
   const confirmDelete = async () => {
     if (!deleteLinkId || !user) return;
-    setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "users", user.uid, "links", deleteLinkId));
-      setLinks(links.filter(link => link.id !== deleteLinkId));
+      await deleteLink(deleteLinkId);
       setDeleteLinkId(null);
-      toast.success("링크가 삭제되었습니다.");
     } catch (error) {
-      console.error("Error deleting link:", error);
-      toast.error("링크 삭제에 실패했습니다.");
-    } finally {
-      setIsDeleting(false);
+      // 에러는 useLinks 내부에서 처리됨
+    }
+  };
+
+  const startProfileEditing = (field: 'username' | 'displayName' | 'bio', currentValue: string | null) => {
+    setEditingProfileField(field);
+    setProfileFormValue(currentValue || "");
+  };
+
+  const cancelProfileEditing = () => {
+    setEditingProfileField(null);
+    setProfileFormValue("");
+  };
+
+  const saveProfileEditing = async () => {
+    if (!user || !editingProfileField) return;
+
+    const trimmedValue = profileFormValue.trim();
+    
+    // 유효성 검사
+    if (editingProfileField === 'displayName') {
+      if (trimmedValue.length < 3) {
+        toast.error("고유 URL은 3자 이상이어야 합니다.");
+        return;
+      }
+      if (!/^[a-zA-Z0-9_.-]+$/.test(trimmedValue)) {
+        toast.error("고유 URL은 영문, 숫자, 밑줄, 마침표, 하이픈만 사용할 수 있습니다.");
+        return;
+      }
+    } else if (editingProfileField === 'username') {
+      if (trimmedValue.length < 1) {
+        toast.error("이름을 입력해주세요.");
+        return;
+      }
+    }
+
+    // 값이 변경되지 않았으면 취소
+    if (trimmedValue === (userData?.[editingProfileField] || "")) {
+      cancelProfileEditing();
+      return;
+    }
+
+    try {
+      await updateProfile({ uid: user.uid, field: editingProfileField, value: trimmedValue });
+      cancelProfileEditing();
+    } catch (error) {
+      // 에러는 useProfile 내부에서 처리됨 (낙관적 업데이트 롤백 포함)
     }
   };
 
@@ -477,17 +411,112 @@ export default function Page() {
             </div>
           </div>
           
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-1">
-            {userData?.username || user.displayName || "사용자"}
-          </h1>
-          {userData?.displayName && (
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-3">
+          {/* Username (이름) */}
+          {editingProfileField === 'username' ? (
+            <div className="flex items-center gap-2 mb-1">
+              <Input
+                autoFocus
+                value={profileFormValue}
+                onChange={(e) => setProfileFormValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveProfileEditing();
+                  if (e.key === 'Escape') cancelProfileEditing();
+                }}
+                className="text-center font-extrabold text-xl h-9 w-[200px]"
+                placeholder="이름을 입력하세요"
+                disabled={isUpdating}
+              />
+              <Button size="icon" variant="ghost" onClick={saveProfileEditing} disabled={isUpdating} className="h-8 w-8 text-indigo-600">
+                {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              </Button>
+              <Button size="icon" variant="ghost" onClick={cancelProfileEditing} disabled={isUpdating} className="h-8 w-8 text-slate-400">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : (
+            <h1 
+              onClick={() => startProfileEditing('username', userData?.username || user.displayName || "사용자")}
+              className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-1 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-1 rounded-md transition-colors group relative flex items-center justify-center gap-2"
+              title="이름 수정"
+            >
+              {userData?.username || user.displayName || "사용자"}
+              <Pencil className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
+            </h1>
+          )}
+
+          {/* Display Name (고유 URL 핸들) */}
+          {editingProfileField === 'displayName' ? (
+            <div className="flex flex-col items-center gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-medium">@</span>
+                <Input
+                  autoFocus
+                  value={profileFormValue}
+                  onChange={(e) => setProfileFormValue(e.target.value.toLowerCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveProfileEditing();
+                    if (e.key === 'Escape') cancelProfileEditing();
+                  }}
+                  className="text-center font-medium h-8 w-[180px] px-2"
+                  placeholder="고유 ID (URL)"
+                  disabled={isUpdating}
+                />
+                <Button size="icon" variant="ghost" onClick={saveProfileEditing} disabled={isUpdating} className="h-8 w-8 text-indigo-600">
+                  {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                </Button>
+                <Button size="icon" variant="ghost" onClick={cancelProfileEditing} disabled={isUpdating} className="h-8 w-8 text-slate-400">
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          ) : userData?.displayName ? (
+            <p 
+              onClick={() => startProfileEditing('displayName', userData.displayName)}
+              className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-1 rounded-md transition-colors group relative flex items-center justify-center gap-2"
+              title="고유 URL 핸들 수정"
+            >
               @{userData.displayName}
+              <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
+            </p>
+          ) : null}
+
+          {/* Bio (소개) */}
+          {editingProfileField === 'bio' ? (
+            <div className="flex flex-col items-center gap-2 w-full max-w-[320px]">
+              <textarea
+                autoFocus
+                value={profileFormValue}
+                onChange={(e) => setProfileFormValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') cancelProfileEditing();
+                }}
+                className="w-full flex min-h-[80px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:ring-offset-slate-950 dark:placeholder:text-slate-400 text-center resize-none"
+                placeholder="간단한 소개글을 입력해주세요"
+                rows={3}
+                disabled={isUpdating}
+              />
+              <div className="flex justify-center gap-2 mt-1">
+                <Button size="sm" variant="outline" onClick={cancelProfileEditing} disabled={isUpdating} className="h-8">
+                  취소
+                </Button>
+                <Button size="sm" onClick={saveProfileEditing} disabled={isUpdating} className="h-8 bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-600">
+                  {isUpdating ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                  저장
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p 
+              onClick={() => startProfileEditing('bio', userData?.bio || "")}
+              className="text-base text-slate-600 dark:text-slate-400 text-center max-w-[280px] leading-relaxed font-medium cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 px-4 py-2 rounded-xl transition-colors group relative"
+              title="소개글 수정"
+            >
+              {userData?.bio || "환영합니다! 다양한 플랫폼과 포트폴리오를 한 곳에 모았습니다. ✨"}
+              <span className="absolute -right-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Pencil className="w-4 h-4 text-slate-400" />
+              </span>
             </p>
           )}
-          <p className="text-base text-slate-600 dark:text-slate-400 text-center max-w-[280px] leading-relaxed font-medium">
-            환영합니다! 다양한 플랫폼과 포트폴리오를 한 곳에 모았습니다. ✨
-          </p>
         </div>
 
         {/* Links List Section */}
@@ -547,8 +576,8 @@ export default function Page() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="submit" disabled={isAdding}>
-                    {isAdding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  <Button type="submit" disabled={isAddingLocal}>
+                    {isAddingLocal ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                     새 링크 추가하기
                   </Button>
                 </DialogFooter>
@@ -556,7 +585,7 @@ export default function Page() {
             </DialogContent>
           </Dialog>
 
-          {isLoading ? (
+          {isLoadingLinks ? (
             <div className="flex flex-col items-center justify-center py-10 opacity-70">
               <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-4" />
               <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">링크를 불러오는 중입니다...</p>
@@ -598,11 +627,11 @@ export default function Page() {
                       {editErrors.url && <p className="text-xs text-red-500 font-medium">{editErrors.url.message}</p>}
                     </div>
                     <div className="flex justify-end gap-2 mt-2">
-                      <Button type="button" variant="ghost" size="sm" onClick={cancelEditing} disabled={isEditing}>
+                      <Button type="button" variant="ghost" size="sm" onClick={cancelEditing} disabled={isEditingLocal}>
                         <X className="w-4 h-4 mr-1" /> 취소
                       </Button>
-                      <Button type="submit" size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-600" disabled={isEditing}>
-                        {isEditing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
+                      <Button type="submit" size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-600" disabled={isEditingLocal}>
+                        {isEditingLocal ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
                         저장
                       </Button>
                     </div>
