@@ -328,7 +328,19 @@ export default function Page() {
             </div>
             <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">My Link</span>
           </div>
-          <DropdownMenu>
+          <div className="flex items-center gap-3">
+            {userData?.displayName && (
+              <Button 
+                variant="ghost" 
+                className="hidden sm:flex items-center gap-2 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 dark:text-slate-300 dark:hover:text-indigo-400 dark:hover:bg-indigo-900/30 rounded-full h-10 px-4 transition-colors"
+                onClick={() => window.open(`/${userData.displayName}`, '_blank')}
+                title="내 페이지 미리보기"
+              >
+                <Eye className="w-4 h-4" />
+                <span className="text-sm font-medium">내 페이지</span>
+              </Button>
+            )}
+            <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="rounded-full w-10 h-10 overflow-hidden border-2 border-white/60 dark:border-white/10 shadow-sm hover:shadow-md transition-all hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
                 {user.photoURL ? (
@@ -393,6 +405,7 @@ export default function Page() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         </div>
 
         {/* Profile Section */}
