@@ -1,12 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { db } from "@/lib/firebase"
-import { doc, updateDoc, collection, query, where, getDocs } from "firebase/firestore"
+import { doc, updateDoc } from "firebase/firestore"
 import { toast } from "sonner"
 import { UserData } from "./useAuthUser"
 
 interface UpdateProfileParams {
   uid: string
-  field: "username" | "displayName" | "bio"
+  field: "username" | "bio"
   value: string
 }
 
@@ -15,18 +15,6 @@ export function useProfile() {
 
   const updateProfileMutation = useMutation({
     mutationFn: async ({ uid, field, value }: UpdateProfileParams) => {
-      // 고유 URL 중복 검사
-      if (field === "displayName") {
-        const usersRef = collection(db, "users")
-        const q = query(usersRef, where("displayName", "==", value))
-        const querySnapshot = await getDocs(q)
-
-        const duplicateExists = querySnapshot.docs.some((d) => d.id !== uid)
-        if (duplicateExists) {
-          throw new Error("이미 사용 중인 고유 URL입니다. 다른 URL을 입력해주세요.")
-        }
-      }
-
       // Firestore 업데이트
       const userRef = doc(db, "users", uid)
       await updateDoc(userRef, {

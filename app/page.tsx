@@ -74,7 +74,7 @@ export default function Page() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null)
   const [deleteLinkId, setDeleteLinkId] = useState<string | null>(null)
-  const [editingProfileField, setEditingProfileField] = useState<'username' | 'displayName' | 'bio' | null>(null)
+  const [editingProfileField, setEditingProfileField] = useState<'username' | 'bio' | null>(null)
   const [profileFormValue, setProfileFormValue] = useState("")
 
   const handleSignIn = async () => {
@@ -174,7 +174,7 @@ export default function Page() {
     }
   };
 
-  const startProfileEditing = (field: 'username' | 'displayName' | 'bio', currentValue: string | null) => {
+  const startProfileEditing = (field: 'username' | 'bio', currentValue: string | null) => {
     setEditingProfileField(field);
     setProfileFormValue(currentValue || "");
   };
@@ -190,16 +190,7 @@ export default function Page() {
     const trimmedValue = profileFormValue.trim();
     
     // 유효성 검사
-    if (editingProfileField === 'displayName') {
-      if (trimmedValue.length < 3) {
-        toast.error("고유 URL은 3자 이상이어야 합니다.");
-        return;
-      }
-      if (!/^[a-zA-Z0-9_.-]+$/.test(trimmedValue)) {
-        toast.error("고유 URL은 영문, 숫자, 밑줄, 마침표, 하이픈만 사용할 수 있습니다.");
-        return;
-      }
-    } else if (editingProfileField === 'username') {
+    if (editingProfileField === 'username') {
       if (trimmedValue.length < 1) {
         toast.error("이름을 입력해주세요.");
         return;
@@ -457,39 +448,10 @@ export default function Page() {
             </h1>
           )}
 
-          {/* Display Name (고유 URL 핸들) */}
-          {editingProfileField === 'displayName' ? (
-            <div className="flex flex-col items-center gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500 font-medium">@</span>
-                <Input
-                  autoFocus
-                  value={profileFormValue}
-                  onChange={(e) => setProfileFormValue(e.target.value.toLowerCase())}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') saveProfileEditing();
-                    if (e.key === 'Escape') cancelProfileEditing();
-                  }}
-                  className="text-center font-medium h-8 w-[180px] px-2"
-                  placeholder="고유 ID (URL)"
-                  disabled={isUpdating}
-                />
-                <Button size="icon" variant="ghost" onClick={saveProfileEditing} disabled={isUpdating} className="h-8 w-8 text-indigo-600">
-                  {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                </Button>
-                <Button size="icon" variant="ghost" onClick={cancelProfileEditing} disabled={isUpdating} className="h-8 w-8 text-slate-400">
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          ) : userData?.displayName ? (
-            <p 
-              onClick={() => startProfileEditing('displayName', userData.displayName)}
-              className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 px-3 py-1 rounded-md transition-colors group relative flex items-center justify-center gap-2"
-              title="고유 URL 핸들 수정"
-            >
+          {/* Display Name (고유 URL 핸들) - 읽기 전용 */}
+          {userData?.displayName ? (
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-3 px-3 py-1">
               @{userData.displayName}
-              <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
             </p>
           ) : null}
 

@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =============================================
+    // users/{userId} - 사용자 프로필 문서
+    // =============================================
+    match /users/{userId} {
+
+      // 읽기: 누구나 가능 (방문자 프로필 조회용)
+      allow read: if true;
+
+      // 생성: 로그인 + 본인 문서만 생성 가능
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.keys().hasOnly([
+                         'uid', 'displayName', 'username', 'email', 'photoURL', 'bio', 'createdAt'
+                       ]);
+
+      // 수정: 로그인 + 본인 문서만 + 허용된 필드만 변경 가능
+      // - username, bio 만 수정 허용
+      // - uid, email, displayName, createdAt 등 민감 필드 변경 차단
+      allow update: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['username', 'bio', 'photoURL']);
+
+      // 삭제: 불가 (계정 삭제 기능 미구현)
+      allow delete: if false;
+
+      // =============================================
+      // users/{userId}/links/{linkId} - 링크 서브컬렉션
+      // =============================================
+      match /links/{linkId} {
+
+        // 읽기: 누구나 가능 (방문자 링크 목록 조회용)
+        allow read: if true;
+
+        // 생성: 로그인 + 본인 링크만 + 필수 필드 검증
+        allow create: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.keys().hasAll(['title', 'url', 'createdAt'])
+                      && request.resource.data.title is string
+                      && request.resource.data.title.size() >= 1
+                      && request.resource.data.title.size() <= 50
+                      && request.resource.data.url is string
+                      && request.resource.data.url.size() >= 1;
+
+        // 수정: 로그인 + 본인 링크만 + title, url만 변경 허용
+        allow update: if request.auth != null
+                      && request.auth.uid == userId
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(['title', 'url']);
+
+        // 삭제: 로그인 + 본인 링크만
+        allow delete: if request.auth != null
+                      && request.auth.uid == userId;
+      }
+    }
+
+    // 그 외 모든 경로: 접근 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
