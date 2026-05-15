@@ -32,6 +32,7 @@ export function usePublicProfile(displayName: string) {
           title: data.title,
           url: data.url,
           createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+          clickCount: data.clickCount || 0,
         } as LinkType
       })
 

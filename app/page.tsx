@@ -649,11 +649,17 @@ export default function Page() {
                         )}
                       </div>
                       
-                      {/* Title */}
+                      {/* Title & Click Count */}
                       <div className="flex-grow text-center px-4">
                         <h2 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors text-base">
                           {link.title}
                         </h2>
+                        <div className="flex items-center justify-center gap-1 mt-0.5">
+                          <Eye className="w-3 h-3 text-slate-400" />
+                          <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                            {link.clickCount.toLocaleString()}
+                          </span>
+                        </div>
                       </div>
                       
                       {/* Action Buttons */}

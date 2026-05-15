@@ -3,10 +3,12 @@
 import { usePublicProfile } from "@/hooks/usePublicProfile"
 import { notFound } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
-import { Link as LinkIcon, Loader2, Share } from "lucide-react"
+import { Link as LinkIcon, Loader2, Share, Eye } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { use } from "react"
+import { db } from "@/lib/firebase"
+import { doc, updateDoc, increment } from "firebase/firestore"
 
 function getDomain(url: string) {
   try {
@@ -43,6 +45,15 @@ export default function PublicProfilePage(props: { params: Promise<{ displayName
       toast.success("프로필 주소가 클립보드에 복사되었습니다!");
     } catch (_) {
       toast.error("링크 복사에 실패했습니다.");
+    }
+  }
+
+  const handleLinkClick = (linkId: string) => {
+    try {
+      const docRef = doc(db, "users", user.uid, "links", linkId)
+      updateDoc(docRef, { clickCount: increment(1) })
+    } catch (error) {
+      console.error("Error incrementing click count:", error)
     }
   }
 
@@ -124,6 +135,7 @@ export default function PublicProfilePage(props: { params: Promise<{ displayName
                 href={link.url} 
                 target="_blank" 
                 rel="noopener noreferrer"
+                onClick={() => handleLinkClick(link.id)}
                 className="group w-full outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-2xl animate-in fade-in slide-in-from-bottom-4"
                 style={{ animationFillMode: "both", animationDelay: `${(index + 1) * 100}ms` }}
               >
@@ -146,11 +158,19 @@ export default function PublicProfilePage(props: { params: Promise<{ displayName
                         )}
                       </div>
                       
-                      {/* Title */}
+                      {/* Title & Click Count */}
                       <div className="flex-grow text-center px-4">
                         <h2 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors text-base">
                           {link.title}
                         </h2>
+                        {link.clickCount > 0 && (
+                          <div className="flex items-center justify-center gap-1 mt-0.5">
+                            <Eye className="w-3 h-3 text-slate-400" />
+                            <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                              {link.clickCount.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       
                       {/* Empty div for balancing */}

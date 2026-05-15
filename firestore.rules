@@ -48,10 +48,14 @@ service cloud.firestore {
                       && request.resource.data.url.size() >= 1;
 
         // 수정: 로그인 + 본인 링크만 + title, url만 변경 허용
-        allow update: if request.auth != null
+        // 또는: 누구나 clickCount만 증가 가능 (방문자 클릭 추적용)
+        allow update: if (request.auth != null
                       && request.auth.uid == userId
                       && request.resource.data.diff(resource.data).affectedKeys()
-                           .hasOnly(['title', 'url']);
+                           .hasOnly(['title', 'url']))
+                      || (request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(['clickCount'])
+                         && request.resource.data.clickCount == resource.data.get('clickCount', 0) + 1);
 
         // 삭제: 로그인 + 본인 링크만
         allow delete: if request.auth != null

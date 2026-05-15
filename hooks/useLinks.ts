@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { db } from "@/lib/firebase"
-import { collection, query, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore"
+import { collection, query, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment } from "firebase/firestore"
 import { Link as LinkType } from "@/data/links"
 import { toast } from "sonner"
 
@@ -21,6 +21,7 @@ export function useLinks(uid?: string) {
           title: data.title,
           url: data.url,
           createdAt: data.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+          clickCount: data.clickCount || 0,
         } as LinkType
       })
     },
@@ -95,6 +96,24 @@ export function useLinks(uid?: string) {
     },
   })
 
+  // 5. 링크 클릭 카운트 증가 (Mutation)
+  const incrementClickMutation = useMutation({
+    mutationFn: async ({ ownerUid, linkId }: { ownerUid: string; linkId: string }) => {
+      const docRef = doc(db, "users", ownerUid, "links", linkId)
+      await updateDoc(docRef, { clickCount: increment(1) })
+      return { linkId }
+    },
+    onSuccess: ({ linkId }) => {
+      // 캐시에서 클릭 수 낙관적 업데이트
+      queryClient.setQueryData(["links", uid], (old: LinkType[] | undefined) => {
+        return old ? old.map((l) => (l.id === linkId ? { ...l, clickCount: l.clickCount + 1 } : l)) : []
+      })
+    },
+    onError: (error) => {
+      console.error("Error incrementing click count:", error)
+    },
+  })
+
   return {
     links,
     isLoadingLinks,
@@ -104,5 +123,6 @@ export function useLinks(uid?: string) {
     isEditing: editLinkMutation.isPending,
     deleteLink: deleteLinkMutation.mutateAsync,
     isDeleting: deleteLinkMutation.isPending,
+    incrementClickCount: incrementClickMutation.mutate,
   }
 }
