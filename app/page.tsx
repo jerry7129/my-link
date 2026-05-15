@@ -4,7 +4,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Link as LinkType } from "@/data/links"
 import Link from "next/link"
-import { Link as LinkIcon, Plus, Loader2, Pencil, Trash2, Check, X, LogOut, Eye, Copy, User as UserIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Link as LinkIcon, Plus, Loader2, Pencil, Trash2, Check, X, LogOut, Eye, Copy, User as UserIcon, BarChart3 } from "lucide-react"
 import { useState } from "react"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
@@ -67,6 +68,7 @@ const linkSchema = z.object({
 type LinkFormValues = z.infer<typeof linkSchema>
 
 export default function Page() {
+  const router = useRouter()
   const { user, userData, loadingAuth } = useAuthUser()
   const { links, isLoadingLinks, addLink, editLink, deleteLink, isDeleting } = useLinks(user?.uid)
   const { updateProfile, isUpdating } = useProfile()
@@ -387,6 +389,14 @@ export default function Page() {
               >
                 <Copy className="w-4 h-4 mr-2" />
                 링크 복사
+              </DropdownMenuItem>
+              {/* 통계 보기 */}
+              <DropdownMenuItem
+                onClick={() => router.push("/status")}
+                className="cursor-pointer"
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                통계 보기
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               {/* 로그아웃 */}
