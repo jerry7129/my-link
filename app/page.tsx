@@ -667,7 +667,7 @@ export default function Page() {
                         <div className="flex items-center justify-center gap-1 mt-0.5">
                           <Eye className="w-3 h-3 text-slate-400" />
                           <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                            {link.clickCount.toLocaleString()}
+                            {(link.clickCount || 0).toLocaleString()}
                           </span>
                         </div>
                       </div>

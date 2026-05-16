@@ -36,13 +36,15 @@ export function useLinks(uid?: string) {
         title,
         url,
         createdAt: serverTimestamp(),
+        clickCount: 0,
       })
       return {
         id: docRef.id,
         title,
         url,
         createdAt: new Date().toISOString(),
-      }
+        clickCount: 0,
+      } as LinkType
     },
     onSuccess: (newLink) => {
       // 캐시 수동 업데이트 (또는 queryClient.invalidateQueries 사용 가능)
