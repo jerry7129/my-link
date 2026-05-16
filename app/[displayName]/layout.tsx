@@ -1,5 +1,8 @@
 import type { Metadata } from "next"
 
+export const dynamic = "force-dynamic";
+export const fetchCache = "default-no-store";
+
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://my-link-eight-livid.vercel.app"
 
 /**
@@ -29,7 +32,7 @@ async function fetchUserByDisplayName(displayName: string) {
             limit: 1,
           },
         }),
-        next: { revalidate: 60 },
+        cache: "no-store",
       }
     )
 
