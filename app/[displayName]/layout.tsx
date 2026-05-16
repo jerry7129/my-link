@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mylink.com"
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://my-link-eight-livid.vercel.app"
 
 /**
  * Firestore REST API를 사용하여 displayName으로 사용자 정보를 가져옵니다.

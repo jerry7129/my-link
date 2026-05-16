@@ -9,7 +9,7 @@ import { QueryProvider } from "@/components/providers/query-provider"
 
 const SITE_NAME = "My Link"
 const SITE_DESCRIPTION = "소셜 미디어, 포트폴리오, 웹사이트 링크를 단 하나의 URL로 통합 관리하고 공유하세요. 100% 무료, 모바일 최적화."
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mylink.com"
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://my-link-eight-livid.vercel.app"
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
